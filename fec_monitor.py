@@ -24,6 +24,7 @@ class Contribution:
     contributor_name: str
     employer: str
     committee_name: str
+    load_date: datetime
 
 def get_secret(secret_id: str) -> str:
     """Retrieve secret from Google Cloud Secret Manager."""
@@ -32,18 +33,28 @@ def get_secret(secret_id: str) -> str:
     response = client.access_secret_version(request={"name": name})
     return response.payload.data.decode("UTF-8")
 
-def get_fec_contributions(contributor: Contributor, api_key: str, days_back: int = 30) -> List[Contribution]:
-    """Fetch contributions from FEC API for a given contributor."""
+def get_fec_contributions(contributor: Contributor, api_key: str, days_back_load: int = 14, days_back_contrib: int = 180) -> List[Contribution]:
+    """
+    Fetch contributions from FEC API for a given contributor.
+    
+    Args:
+        contributor: Contributor object containing name and employer
+        api_key: FEC API key
+        days_back_load: Number of days back to check for load_date
+        days_back_contrib: Number of days back to search for contributions
+    """
     base_url = "https://api.open.fec.gov/v1/schedules/schedule_a/"
     
-    # Calculate date range
+    # Calculate date ranges
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=days_back)
+    contrib_start_date = end_date - timedelta(days=days_back_contrib)
+    min_load_date = end_date - timedelta(days=days_back_load)
     
     params = {
         'api_key': api_key,
         'contributor_name': contributor.name,
-        'min_date': start_date.strftime('%m/%d/%Y'),
+        'contributor_employer': contributor.employer,
+        'min_date': contrib_start_date.strftime('%m/%d/%Y'),
         'max_date': end_date.strftime('%m/%d/%Y'),
         'sort': '-contribution_receipt_date',
         'per_page': 100,
@@ -57,14 +68,20 @@ def get_fec_contributions(contributor: Contributor, api_key: str, days_back: int
         
         contributions = []
         for result in data['results']:
-            contribution = Contribution(
-                date=datetime.strptime(result['contribution_receipt_date'], '%Y-%m-%d'),
-                amount=float(result['contribution_receipt_amount']),
-                contributor_name=result['contributor_name'],
-                employer=result['contributor_employer'] or 'Not reported',
-                committee_name=result['committee']['name']
-            )
-            contributions.append(contribution)
+            # Parse the load_date
+            load_date = datetime.strptime(result['load_date'], '%Y-%m-%dT%H:%M:%S')
+            
+            # Only include contributions loaded after min_load_date
+            if load_date > min_load_date:
+                contribution = Contribution(
+                    date=datetime.strptime(result['contribution_receipt_date'], '%Y-%m-%d'),
+                    amount=float(result['contribution_receipt_amount']),
+                    contributor_name=result['contributor_name'],
+                    employer=result['contributor_employer'] or 'Not reported',
+                    committee_name=result['committee']['name'],
+                    load_date=load_date
+                )
+                contributions.append(contribution)
         
         return contributions
     
@@ -90,6 +107,7 @@ def format_email_body(contributions_by_contributor: Dict[str, List[Contribution]
                     <td>${contribution.amount:,.2f}</td>
                     <td>{contribution.committee_name}</td>
                     <td>{contribution.employer}</td>
+                    <td>{contribution.load_date.strftime('%Y-%m-%d %H:%M:%S')}</td>
                 </tr>
                 """
             html += "</table><br>"
@@ -141,7 +159,42 @@ def monitor_contributions(request: Request):
         
         # List of contributors to monitor
         contributors = [
-            Contributor(name="Sundar Pichai"),
+            Contributor(
+                name="Sundar Pichai",
+                employer="Google"),
+            Contributor(
+                name="Kent Walker",
+                employer="Google"),
+            Contributor(
+                name="Thomas Kurian",
+                employer="Google"),
+            Contributor(
+                name="Jen Fitzpatrick",
+                employer="Google"),
+            Contributor(
+                name="Rick Osterloh",
+                employer="Google"),
+            Contributor(
+                name="Prabhakar Raghavan",
+                employer="Google"),
+            Contributor(
+                name="Lorraine Twohill",
+                employer="Google"),
+            Contributor(
+                name="Corey DuBrowa",
+                employer="Google"),
+            Contributor(
+                name="Neal Mohan",
+                employer="Google"),
+            Contributor(
+                name="Anat Ashkenazi",
+                employer="Google"),
+            Contributor(
+                name="Jeff Dean",
+                employer="Google"),
+            Contributor(
+                name="Ruth Porat",
+                employer="Google"),
             # Add more contributors as needed
         ]
         
