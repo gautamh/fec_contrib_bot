@@ -6,7 +6,7 @@ from flask import Request
 from werkzeug.test import EnvironBuilder
 
 # Import the main function from your original script
-from fec_monitor import monitor_contributions
+from main import monitor_contributions
 
 def create_test_request():
     """Create a test request object similar to what Cloud Run would receive"""
