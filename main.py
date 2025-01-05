@@ -4,6 +4,7 @@ import os
 import requests
 from datetime import datetime, timedelta
 from typing import List, Dict
+from dotenv import load_dotenv
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -29,7 +30,7 @@ class Contribution:
 def get_secret(secret_id: str) -> str:
     """Retrieve secret from Google Cloud Secret Manager."""
     client = secretmanager.SecretManagerServiceClient()
-    name = f"projects/{os.environ['PROJECT_ID']}/secrets/{secret_id}/versions/latest"
+    name = f"projects/{os.environ['SECRET_PROJECT_ID']}/secrets/{secret_id}/versions/latest"
     response = client.access_secret_version(request={"name": name})
     return response.payload.data.decode("UTF-8")
 
@@ -139,6 +140,11 @@ def send_email(to_email: str, subject: str, html_content: str, smtp_config: dict
 @functions_framework.http
 def monitor_contributions(request: Request):
     """Cloud Function entry point to monitor FEC contributions."""
+    print("called monitor_contributions")
+
+    # Load environment variables from .env file
+    load_dotenv()
+
     try:
         # Get configuration from environment variables and secrets
         project_id = os.environ['PROJECT_ID']
@@ -201,11 +207,13 @@ def monitor_contributions(request: Request):
         # Fetch contributions for each contributor
         contributions_by_contributor = {}
         for contributor in contributors:
+            print(f"getting contributions for {contributor.name}")
             contributions = get_fec_contributions(contributor, fec_api_key)
             contributions_by_contributor[contributor.name] = contributions
         
         # Format and send email if there are any contributions
         if any(contributions_by_contributor.values()):
+            print("preparing to send email")
             html_content = format_email_body(contributions_by_contributor)
             subject = f"FEC Contribution Alert - {datetime.now().strftime('%Y-%m-%d')}"
             send_email(notification_email, subject, html_content, smtp_config)
